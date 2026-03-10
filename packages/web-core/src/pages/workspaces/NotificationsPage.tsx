@@ -7,7 +7,6 @@ import { UserAvatar } from '@vibe/ui/components/UserAvatar';
 import { useNotifications } from '@/shared/hooks/useNotifications';
 import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { useOrganizationMembers } from '@/shared/hooks/useOrganizationMembers';
-import { makeRequest } from '@/shared/lib/remoteApi';
 import {
   getNotificationSegments,
   getDeeplinkPath,
@@ -48,7 +47,7 @@ function NotificationMessage({
 export function NotificationsPage() {
   const router = useRouter();
   const selectedOrgId = useOrganizationStore((s) => s.selectedOrgId);
-  const { data, update, enabled, unseenCount } = useNotifications();
+  const { data, update, updateMany, enabled, unseenCount } = useNotifications();
   const { data: members = [] } = useOrganizationMembers(
     selectedOrgId ?? undefined
   );
@@ -74,9 +73,11 @@ export function NotificationsPage() {
     [update, router]
   );
 
-  const handleMarkAllSeen = useCallback(async () => {
-    await makeRequest('/v1/notifications/mark-all-seen', { method: 'POST' });
-  }, []);
+  const handleMarkAllSeen = useCallback(() => {
+    const unseen = data.filter((n) => !n.seen);
+    if (unseen.length === 0) return;
+    updateMany(unseen.map((n) => ({ id: n.id, changes: { seen: true } })));
+  }, [data, updateMany]);
 
   if (!enabled) {
     return (
