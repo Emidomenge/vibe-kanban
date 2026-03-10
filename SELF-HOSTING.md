@@ -17,8 +17,32 @@ Internet → vibe-kanban.atoplix.com → Nginx Proxy Manager → localhost:8090 
 
 | File | Purpose |
 |------|---------|
-| `.env.remote` | Secrets and environment variables (never commit this) |
 | `crates/remote/docker-compose.prod.yml` | Docker Compose config for all services |
+
+## Secrets (Vault)
+
+All secrets are stored in Vault at `secret/unraid/vibe-kanban` (Vault runs on `http://192.168.0.10:8200`).
+
+| Key | Description |
+|-----|-------------|
+| `VIBEKANBAN_REMOTE_JWT_SECRET` | JWT signing secret |
+| `ELECTRIC_ROLE_PASSWORD` | ElectricSQL database role password |
+| `DB_PASSWORD` | PostgreSQL password |
+| `DOMAIN` | Public domain (`vibe-kanban.atoplix.com`) |
+| `GITHUB_OAUTH_CLIENT_ID` | GitHub OAuth client ID |
+| `GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth client secret |
+
+To view secrets:
+
+```bash
+vault kv get secret/unraid/vibe-kanban
+```
+
+To update a secret:
+
+```bash
+vault kv patch secret/unraid/vibe-kanban KEY=new_value
+```
 
 ## Persistent Data on Unraid
 
@@ -31,11 +55,14 @@ All data is stored under `/mnt/user/appdata/vibe-kanban/` on the NAS:
 
 ## Deploy / Redeploy
 
-Run from the repo root on your laptop:
+Run from the repo root on your laptop. Secrets are loaded from Vault:
 
 ```bash
+# Load secrets from Vault
+export $(vault kv get -format=json secret/unraid/vibe-kanban | jq -r '.data.data | to_entries[] | "\(.key)=\(.value)"')
+
+# Deploy (add --build when deploying code changes)
 DOCKER_HOST=ssh://unraid docker compose \
-  --env-file .env.remote \
   -f crates/remote/docker-compose.prod.yml \
   up -d --build
 ```
@@ -48,8 +75,9 @@ DOCKER_HOST=ssh://unraid docker compose \
 ```bash
 git pull origin main
 
+export $(vault kv get -format=json secret/unraid/vibe-kanban | jq -r '.data.data | to_entries[] | "\(.key)=\(.value)"')
+
 DOCKER_HOST=ssh://unraid docker compose \
-  --env-file .env.remote \
   -f crates/remote/docker-compose.prod.yml \
   up -d --build
 ```
@@ -58,12 +86,12 @@ DOCKER_HOST=ssh://unraid docker compose \
 
 ```bash
 DOCKER_HOST=ssh://unraid docker compose \
-  --env-file .env.remote \
   -f crates/remote/docker-compose.prod.yml \
   ps
 ```
 
 All 3 services should show `(healthy)`:
+
 - `remote-remote-db-1` — PostgreSQL
 - `remote-remote-server-1` — App server (port 8090)
 - `remote-electric-1` — ElectricSQL sync
@@ -73,13 +101,11 @@ All 3 services should show `(healthy)`:
 ```bash
 # All services
 DOCKER_HOST=ssh://unraid docker compose \
-  --env-file .env.remote \
   -f crates/remote/docker-compose.prod.yml \
   logs -f
 
 # Specific service
 DOCKER_HOST=ssh://unraid docker compose \
-  --env-file .env.remote \
   -f crates/remote/docker-compose.prod.yml \
   logs -f remote-server
 ```
@@ -89,13 +115,11 @@ DOCKER_HOST=ssh://unraid docker compose \
 ```bash
 # Stop all
 DOCKER_HOST=ssh://unraid docker compose \
-  --env-file .env.remote \
   -f crates/remote/docker-compose.prod.yml \
   down
 
 # Restart a specific service
 DOCKER_HOST=ssh://unraid docker compose \
-  --env-file .env.remote \
   -f crates/remote/docker-compose.prod.yml \
   restart remote-server
 ```
@@ -112,6 +136,7 @@ DOCKER_HOST=ssh://unraid docker compose \
 ## OAuth
 
 GitHub OAuth app: [github.com/settings/developers](https://github.com/settings/developers)
+
 - Callback URL: `https://vibe-kanban.atoplix.com/v1/oauth/github/callback`
 
 ## Backup Database
